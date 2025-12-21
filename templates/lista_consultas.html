@@ -1,4 +1,11 @@
-<h1>Lista de Consultas</h1>
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center">
+    <h1>Lista de Consultas</h1>
+    <button class="btn btn-success mb-3"
+            onclick="window.location.href='{% url 'agendar_consulta' %}'">Agendar consulta</button>
+</div>
 <table class="table table-striped">
     <thead>
         <tr>
@@ -25,3 +32,4 @@
         {% endfor %}
     </tbody>
 </table>
+{% endblock content %}

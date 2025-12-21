@@ -9,6 +9,12 @@ class ConsultaForm(forms.ModelForm):
             'data': forms.DateTimeInput(attrs={'type': 'datetime-local'}),
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        for field in self.fields.values():
+            field.widget.attrs.update({'class': 'form-control'})
+
     def clean(self):
         cleaned_data = super().clean()
         data = cleaned_data.get('data')
