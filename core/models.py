@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.db import models
 
 # Tabela de clientes
@@ -56,5 +57,19 @@ class Consulta(models.Model):
     motivo = models.TextField()
     observacoes = models.TextField(blank=True)
 
+    def clean(self):
+        if Consulta.objects.filter(data=self.data, veterinario=self.veterinario).exists():
+            raise ValidationError('Já existe uma consulta agendada para este horário com este veterinário.')
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return f"Consulta de {self.animal.nome} com {self.veterinario.nome} em {self.data}"
+
+
+
+
+
+
