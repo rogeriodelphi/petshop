@@ -1,9 +1,10 @@
 {% extends 'base.html' %}
 {% block content %}
-<h2>Agendar consultas</h2>
-
+<div class="page-header">
+    <h2 class="page-title">Agendar Consulta</h2>
+</div>
 <!-- Buscar cliente -->
-<form class="row g-3 mb-4" method="post">
+<form class="row g-3 mb-4" method="post" id="buscarClienteForm">
     {% csrf_token %}
     <div class="col-auto">
         <label for="cpfInput" class="visually-hidden">CPF do Cliente</label>
@@ -12,22 +13,27 @@
     <div class="col-auto">
         <button type="submit" name="buscar" class="btn btn-primary">Buscar Cliente</button>
     </div>
+        <div class="col-auto">
+        <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#clienteModal">
+            +
+        </button>
+    </div>
 </form>
 
 
-
+{% include 'cliente/add_cliente_modal.html' %}
 
 
 {% if cliente %}
     <!-- Dados do cliente -->
     <div class="card shadow-sm mb-4">
-        <div class="card-body">
-            <h5 class="card-title">Cliente encontrado: {{ cliente.cpf }}</h5>
-            <p><strong>Nome:</strong> {{ cliente.nome }}</p>
-            <p><strong>Telefone:</strong> {{ cliente.telefone }}</p>
-            <p><strong>Email:</strong> {{ cliente.email }}</p>
-            <p><strong>Endereço:</strong> {{ cliente.endereco }}</p>
-        </div>
+      <div class="card-body">
+        <h5 class="card-title">Cliente encontrado: {{ cliente.cpf }}</h5>
+        <p><strong>Nome:</strong> {{ cliente.nome }}</p>
+        <p><strong>Telefone:</strong> {{ cliente.telefone }}</p>
+        <p><strong>Email:</strong> {{ cliente.email }}</p>
+        <p><strong>Endereço:</strong> {{ cliente.endereco }}</p>
+      </div>
     </div>
 
     <!-- Lista de animais -->
@@ -38,39 +44,234 @@
         </button>
     </div>
     {% if animais %}
-    <ul class="list-unstyled">
+    <ul class="list-unstyled" id="animalList">
         {% for animal in animais %}
             <li class="list-group-item">
-                <strong>{{ animal.nome }}</strong> / {{ animal.raca }}
+                <strong id="animalGet">{{ animal.nome }}</strong> / {{ animal.raca }}
                 <button type="button" class="btn btn-info btn-sm select-animal-btn" data-animal-id="{{ animal.id }}">Selecionar</button>
             </li>
         {% endfor %}
     </ul>
     {% else %}
+    <ul class="list-unstyled" id="animalList">
         <p class="text-muted">Nenhum animal cadastrado para este cliente.</p>
-        <a href="" class="btn btn-warning btn-sm">+ Adicionar Novo Animal</a>
+    </ul>
     {% endif %}
     <hr>
 
+    <form method="POST">
+        {% csrf_token %}
 
-<!-- Formulário de agendamento -->
-<form method="POST">
-    {% csrf_token %}
-    {{ form.as_p }}
-    <button type="submit" name="salvar" class="btn btn-primary">Agendar</button>
-</form>
+        <div class="mb-3">
+            <label for="animal">Animal</label>
+
+            <div id="animalSel"></div>
+
+            <input type="hidden" class="form-control" id="animal" name="animal" readonly>
+        </div>
+        <hr>
+
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label for="veterinario">Veterinário</label>
+                {{ form.veterinario }}
+            </div>
+
+            <div class="col-md-6 mb-3">
+                <div class="d-flex">
+
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#dataDoctorModal">Selecionar Data Disponível</button>
+
+                    <div class="ms-2">
+                        <label for="data">Data</label>
+                        {{ form.data }}
+                    </div>
+
+                </div>
+            </div>
+
+        </div>
+
+        <hr>
+        <div class="mb-3">
+            <label for="motivo">Motivo</label>
+            {{ form.motivo }}
+        </div>
+        <div class="mb-3">
+            <label for="observacoes">Observações</label>
+            {{ form.observacoes }}
+        </div>
+
+        <!-- {{ form.as_p }} -->
+        <button type="submit" name="salvar" class="btn btn-primary">Agendar</button>
+        {% comment %} <a href="{% url 'lista_consultas' %}" class="btn btn-secondary">Cancelar</a> {% endcomment %}
+    </form>
+
+
+    <div class="modal modal-xl fade" id="dataDoctorModal" tabindex="-1">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Ver data Disponível</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+              <div id="calendar_doctor"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
 {% endif %}
+
+{% include 'animal/add_animal_modal.html' %}
 
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
-<script>
+ <script>
     $(document).ready(function() {
-        $('.select-animal-btn').click(function () {
+        $('.select-animal-btn').click(function() {
             var animalId = $(this).data('animal-id');
-            $('#id_animal').val(animalId); // Define o valor do campo oculto
-            alert('Animal selecionado com ID: ' + animalId);
+            var animalNome = $(this).closest('li').find('strong').text();
+
+           $('#animalSel').html(
+                '<div class="text-success d-inline-block bg-light p-1 rounded fs-5">' +
+                    '<i class="bi bi-paw-fill me-1"></i>' +
+                    '<strong>' + animalNome + '</strong>' +
+                    ' selecionado' +
+                '</div>'
+            );
+
+
+            $('#animal').val(animalId);  // Define o valor do campo oculto ID
+            // alert('Animal selecionado com ID: ' + animalId);
+
+            console.log('Animal selecionado com ID: ' + animalId);
+            console.log('Nome do Animal: ' + animalNome);
+        });
+
+        let calendar_doctor;
+
+
+        function initializeCalendar() {
+
+            // Obter o ID do veterinário selecionado
+            var veterinarioSelect = document.querySelector('[name="veterinario"]');
+            var veterinarioId = veterinarioSelect ? veterinarioSelect.value : null;
+
+            if (!veterinarioId) {
+                alert('Por favor, selecione um veterinário primeiro.');
+                return;
+            }
+
+            var calendarDoctor = document.getElementById('calendar_doctor');
+            console.log(calendarDoctor);
+
+            // Limpar calendário existente
+            if (calendar_doctor) {
+                calendar_doctor.destroy();
+            }
+
+            calendar_doctor = new FullCalendar.Calendar(calendarDoctor, {
+                initialView: 'timeGridWeek',
+                locale: 'pt-br',
+
+                nowIndicator: true,
+                expandRows: true, // expande as linhas para ocupar todo o espaço
+
+                events: '/eventos_doctor/?veterinario=' + veterinarioId,
+
+                headerToolbar: {
+                    left: 'prev,next today',
+                    center: 'title',
+                    right: 'dayGridMonth,timeGridWeek,timeGridDay,listWeek'
+                },
+                // Configurações de horário
+                slotMinTime: '08:00:00',
+                slotMaxTime: '17:00:00',
+                slotDuration: '01:00:00',
+                slotLabelInterval: '01:00', // rótulo a cada hora
+                allDaySlot: false,  // não mostra a coluna de todos os dias
+
+
+                // Horário de trabalho (excluindo almoço)
+                businessHours: [
+                    { daysOfWeek: [1, 2, 3, 4, 5], startTime: '08:00', endTime: '12:00' },
+                    { daysOfWeek: [1, 2, 3, 4, 5], startTime: '13:00', endTime: '17:00' }
+                ],
+
+                weekends: false, // não mostra sábado e doming
+
+                // Bloquear datas passadas
+                // validRange: {
+                //     start: new Date().toISOString().split('T')[0] // Data atual em formato YYYY-MM-DD
+                // },
+
+                // Manipuladores de eventos simplificados
+                dateClick: function(info) {
+                    // Verificar se é horário de almoço
+                    const hour = new Date(info.date).getHours();
+                    if (hour === 12) {
+                        alert("Horário de almoço não disponível.");
+                        return;
+                    }
+
+                    // Selecionar a data
+                    const dataFormatada = info.date.toISOString().slice(0, 16).replace('T', ' ');
+
+                    document.querySelector('[name="data"]').value = dataFormatada;
+                    $('#dataDoctorModal').modal('hide');
+                },
+
+                eventClick: function(info) {
+                    if (info.event.title === "Disponível") {
+                        // Selecionar horário disponível
+                        //const dataFormatada = info.event.start.toISOString().slice(0, 16).replace('T', ' ');
+
+                        const data = info.event.start
+
+                        console.log("data click", data)
+
+                        // ajustar formato para datetime-local
+                        const ano = data.getFullYear();
+                        const mes = String(data.getMonth() + 1).padStart(2, '0');
+                        const dia = String(data.getDate()).padStart(2, '0');
+                        const horas = String(data.getHours()).padStart(2, '0');
+                        const minutos = String(data.getMinutes()).padStart(2, '0');
+
+                        const dataFormatada = `${ano}-${mes}-${dia}T${horas}:${minutos}`;
+
+                        console.log("[DATA SELECIONADA]", dataFormatada)
+
+                        document.querySelector('[name="data"]').value = dataFormatada;
+                        $('#dataDoctorModal').modal('hide');
+                    } else {
+                        alert("Consulta já agendada: " + info.event.title);
+                    }
+                }
+
+            });
+
+                // Forçar o renderizado corretamente
+                setTimeout(function() {
+                    calendar_doctor.render();
+                }, 50);
+        }
+
+        // Mostra veterinário selecionado
+        document.addEventListener('DOMContentLoaded', function() {
+            $(document).on('change', '[name="veterinario"]', function() {
+                console.log('Veterinário mudou', $(this).val());
+            });
+        });
+
+        // Inicializar calendário quando o modal é aberto
+        $('#dataDoctorModal').on('shown.bs.modal', function () {
+            setTimeout(function() {
+                initializeCalendar();
+            }, 200);
         });
     });
-</script>
+ </script>
 
-{% endblock content %}
+{% endblock %}
