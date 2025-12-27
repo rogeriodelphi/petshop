@@ -111,6 +111,93 @@ def add_cliente(request):
     return render(request, 'cliente/add_cliente_modal.html', {'form': form})
 
 
+# Editar Cliente
+@login_required(login_url='login')
+def edit_cliente(request, pk):
+    cliente = get_object_or_404(Cliente, pk=pk)
+    animais = cliente.animais.all()
+    form_pet = AnimalForm()
+    if request.method == 'POST':
+        form = ClienteForm(request.POST, instance=cliente)
+        if form.is_valid():
+            form.save()
+            return redirect('lista_clientes')
+    else:
+        form = ClienteForm(instance=cliente)
+
+        # Criar um dicionário de formulários para cada animal
+        forms_pet = {}
+        for animal in animais:
+            forms_pet[animal.id] = AnimalForm(instance=animal)
+
+        print(forms_pet)
+
+    return render(request, 'cliente/edit_cliente.html', {
+        'form': form,
+        'cliente': cliente,
+        'animais': animais,
+        'form_pet': form_pet,  # Add Pet
+        'forms_pet': forms_pet  # Edit Pet
+    })
+
+
+# Lista de Veterinarios
+@login_required(login_url='login')
+def lista_veterinarios(request):
+    q = request.GET.get('q', '')
+    veterinarios = MedicoVeterinario.objects.all()
+    form = MedicoVeterinarioForm()
+    if q:
+        veterinarios = veterinarios.filter(
+            Q(nome__icontains=q) | Q(crmv__icontains=q)
+        )
+
+    paginator = Paginator(veterinarios, 10)  # 10 veterinários por página
+    page_number = request.GET.get('page')
+    veterinarios = paginator.get_page(page_number)
+
+    return render(request, 'veterinario/lista_veterinarios.html', {
+        'veterinarios': veterinarios,
+        'q': q,
+        'form': form
+    })
+
+
+# Add Veterinario
+def add_veterinario(request):
+    if request.method == 'POST':
+        form = MedicoVeterinarioForm(request.POST)
+        if form.is_valid():
+            form.save()
+            return JsonResponse({
+                "success": True,
+                "id": form.instance.id,
+                "nome": form.cleaned_data['nome'],
+                "crmv": form.cleaned_data['crmv'],
+                "especialidade": form.cleaned_data['especialidade'],
+                "contato": form.cleaned_data['contato']
+            })
+        else:
+            return JsonResponse({'errors': form.errors}, status=400)
+    else:
+        form = MedicoVeterinarioForm()
+    return render(request, 'veterinario/add_veterinario_modal.html', {'form': form})
+
+
+# Editar Veterinario
+def edit_veterinario(request, pk):
+    veterinario = get_object_or_404(MedicoVeterinario, pk=pk)
+    if request.method == 'POST':
+        form = MedicoVeterinarioForm(request.POST, instance=veterinario)
+        if form.is_valid():
+            form.save()
+            return redirect('lista_veterinarios')
+    else:
+        form = MedicoVeterinarioForm(instance=veterinario)
+    return render(request, 'veterinario/edit_veterinario.html',
+                  {'form': form, 'veterinario': veterinario})
+
+
 # Consultas
 
 @login_required(login_url='login')
@@ -140,7 +227,7 @@ def agendar_consulta(request):
                 messages.error(request, "Cliente não encontrado.")
                 form = ConsultaForm()
 
-        # botão salvar consulta
+                # botão salvar consulta
         elif "salvar" in request.POST:
             form = ConsultaForm(request.POST)
             # print(request.POST)
@@ -199,7 +286,7 @@ def consulta_eventos(request):
 @login_required(login_url="login")
 def consulta_eventos_veterinario(request):
     from django.utils.timezone import localtime, make_aware, get_current_timezone
-    from datetime import datetime, time, timedelta # time é mais limpo que datetime.min.time()
+    from datetime import datetime, time, timedelta  # time é mais limpo que datetime.min.time()
 
     veterinario_id = request.GET.get("veterinario")
     if not veterinario_id:
@@ -212,8 +299,8 @@ def consulta_eventos_veterinario(request):
     )
 
     consultas_dict = {
-            f"{localtime(c.data).strftime('%Y-%m-%d')}-{localtime(c.data).hour}": c.id for c in consultas
-        }
+        f"{localtime(c.data).strftime('%Y-%m-%d')}-{localtime(c.data).hour}": c.id for c in consultas
+    }
     # 2025-09-12-09
     print(consultas_dict)
 
@@ -221,13 +308,13 @@ def consulta_eventos_veterinario(request):
         {
             "id": c.id,
             "title": f"{c.animal.nome} - {c.veterinario.nome}",
-            "start": localtime(c.data).strftime("%Y-%m-%dT%H:%M:%S"), # 2: Converta para o fuso local
+            "start": localtime(c.data).strftime("%Y-%m-%dT%H:%M:%S"),  # 2: Converta para o fuso local
             "color": "#dc3545",  # vermelho
         }
         for c in consultas
     ]
 
-    hoje = localtime().date() # Use localtime() para pegar a data atual no fuso correto
+    hoje = localtime().date()  # Use localtime() para pegar a data atual no fuso correto
     horarios = [8, 9, 10, 11, 13, 14, 15, 16]
 
     for i in range(7):
@@ -239,70 +326,14 @@ def consulta_eventos_veterinario(request):
             key = f"{data.strftime('%Y-%m-%d')}-{hora}"
             print(key)
             if key not in consultas_dict:
-                slot_inicio = make_aware(datetime.combine(data, time(hour=hora)), get_current_timezone()) # timezone são paulo, portugal
+                slot_inicio = make_aware(datetime.combine(data, time(hour=hora)),
+                                         get_current_timezone())  # timezone são paulo, portugal
                 eventos.append(
                     {
                         "id": f"disp-{data}-{hora}",
                         "title": "Disponível",
-                        "start": slot_inicio.strftime("%Y-%m-%dT%H:%M:%S"), # Formate o slot fuso horário
+                        "start": slot_inicio.strftime("%Y-%m-%dT%H:%M:%S"),  # Formate o slot fuso horário
                         "color": "#28a745",  # verde
                     }
                 )
     return JsonResponse(eventos, safe=False)
-
-
-# Lista de Veterinarios
-@login_required(login_url='login')
-def lista_veterinarios(request):
-    q = request.GET.get('q', '')
-    veterinarios = MedicoVeterinario.objects.all()
-    form = MedicoVeterinarioForm()
-    if q:
-        veterinarios = veterinarios.filter(
-            Q(nome__icontains=q) | Q(crmv__icontains=q)
-        )
-
-    paginator = Paginator(veterinarios, 10)  # 10 veterinários por página
-    page_number = request.GET.get('page')
-    veterinarios = paginator.get_page(page_number)
-
-    return render(request, 'veterinario/lista_veterinarios.html', {
-        'veterinarios': veterinarios,
-        'q': q,
-        'form': form
-    })
-
-
-# Add Veterinario
-def add_veterinario(request):
-    if request.method == 'POST':
-        form = MedicoVeterinarioForm(request.POST)
-        if form.is_valid():
-            form.save()
-            return JsonResponse({
-                "success": True,
-                "id": form.instance.id,
-                "nome": form.cleaned_data['nome'],
-                "crmv": form.cleaned_data['crmv'],
-                "especialidade": form.cleaned_data['especialidade'],
-                "contato": form.cleaned_data['contato']
-            })
-        else:
-            return JsonResponse({'errors': form.errors}, status=400)
-    else:
-        form = MedicoVeterinarioForm()
-    return render(request, 'veterinario/add_veterinario_modal.html', {'form': form})
-
-
-# Editar Veterinario
-def edit_veterinario(request, pk):
-    veterinario = get_object_or_404(MedicoVeterinario, pk=pk)
-    if request.method == 'POST':
-        form = MedicoVeterinarioForm(request.POST, instance=veterinario)
-        if form.is_valid():
-            form.save()
-            return redirect('lista_veterinarios')
-    else:
-        form = MedicoVeterinarioForm(instance=veterinario)
-    return render(request, 'veterinario/edit_veterinario.html',
-                  {'form': form, 'veterinario': veterinario})

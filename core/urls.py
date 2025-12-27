@@ -14,6 +14,11 @@ urlpatterns = [
     path('add_animal/', views.add_animal, name='add_animal'),
     path('add_cliente/', views.add_cliente, name='add_cliente'),
 
+    path('clientes/', views.lista_clientes, name='lista_clientes'),
+    path('clientes/<int:pk>/edit/', views.edit_cliente, name='edit_cliente'),
+
+    path('animal/<int:pk>/edit/', views.edit_animal, name='edit_animal'),
+
     path('veterinarios/', views.lista_veterinarios, name='lista_veterinarios'),
     path('veterinarios/<int:pk>/edit/', views.edit_veterinario, name='edit_veterinario'),
     path('add_veterinario/', views.add_veterinario, name='add_veterinario'),
