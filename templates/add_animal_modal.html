@@ -1,0 +1,76 @@
+<!-- add_animal_modal.html -->
+<div class="modal fade" id="animalModal"tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content" id="modalContent">
+      <div class="modal-header">
+        <h5 class="modal-title">Add Pet</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="animalForm">
+            {% csrf_token %}
+            {{ form_pet.as_p }}
+            <input type="hidden" name="cpf" value="{{ cliente.cpf }}">
+            <button type="submit" class="btn btn-primary">Salvar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+<script>
+$('#animalForm').submit(function(e){
+    e.preventDefault();
+
+    // Detectar qual página está usando o modal
+    const isConsultaPage = $('#animalList').length > 0;
+    const isClientePage = $('#animalTable').length > 0;
+
+    $.ajax({
+        url: "/add_animal/",
+        method: "POST",
+        data: $(this).serialize(),
+        success: function(data){
+            console.log(data);
+            // fecha modal
+            $('#animalModal').modal('hide');
+
+            // Comportamento para página de consulta
+            if (isConsultaPage) {
+                // adiciona novo animal na lista de seleção
+                let html_option = `<li class="list-group-item">
+                    <strong>${data.nome}</strong>
+                    <button type="button" class="btn btn-info btn-sm select-animal-btn" data-animal-id="${data.id}">Selecionar</button>
+                </li>`;
+                $('#animalList').append(html_option);
+
+                // Adiciona ao select
+                let newOption = new Option(data.nome, data.id, true, true);
+                $('#id_animal').append(newOption).trigger('change');
+            }
+
+            // Comportamento para página de cliente
+            if (isClientePage) {
+                // Adicionar item na tabela html
+                let html_option_client = `<tr data-animal-id="${data.id}">
+                    <td>${data.nome}</td>
+                    <td>${data.raca || '-'}</td>
+                    <td class="text-center">
+                        <button type="button" class="btn btn-warning"
+                                data-bs-toggle="modal"
+                                data-bs-target="#animalEditModal${data.id}">
+                            Editar
+                        </button>
+                    </td>
+                </tr>`;
+                $("#animalTable tbody").append(html_option_client);
+            }
+        },
+        error: function(xhr){
+            alert('Erro ao adicionar animal');
+        }
+    });
+});
+</script>
