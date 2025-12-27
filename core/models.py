@@ -1,8 +1,14 @@
-from django.core.exceptions import ValidationError
 from django.db import models
+from django.core.exceptions import ValidationError
+from django.contrib.auth.models import User
+from django.utils.timezone import localtime
+
 
 # Tabela de clientes
 class Cliente(models.Model):
+    usuario = models.OneToOneField(User,
+                                   on_delete=models.CASCADE,
+                                   related_name='cliente', null=True)
     nome = models.CharField(max_length=100)
     cpf = models.CharField(max_length=11, blank=True, null=True)
     telefone = models.CharField(max_length=15)
@@ -11,7 +17,6 @@ class Cliente(models.Model):
 
     def __str__(self):
         return self.nome
-
 
 
 # Tabela de Animais
@@ -48,28 +53,46 @@ class MedicoVeterinario(models.Model):
         return self.nome
 
 
-
 # Agenda consulta
 class Consulta(models.Model):
+    class StatusConsulta(models.TextChoices):
+        AGENDADA = 'Agendada'
+        CONCLUIDA = 'Concluida'
+        CANCELADA = 'Cancelada'
+
     animal = models.ForeignKey(Animal, on_delete=models.CASCADE)
     veterinario = models.ForeignKey(MedicoVeterinario, on_delete=models.SET_NULL, null=True)
     data = models.DateTimeField()
     motivo = models.TextField()
     observacoes = models.TextField(blank=True)
 
+    status = models.CharField(max_length=15, choices=StatusConsulta.choices, default=StatusConsulta.AGENDADA)
+
+    created_at = models.DateTimeField(auto_now_add=True)  # Data de criação
+    updated_at = models.DateTimeField(auto_now=True)  # Data de atualização
+
     def clean(self):
-        if Consulta.objects.filter(data=self.data, veterinario=self.veterinario).exists():
-            raise ValidationError('Já existe uma consulta agendada para este horário com este veterinário.')
+        if Consulta.objects.filter(
+                data=self.data, veterinario=self.veterinario).exists() and self.status == 'Agendada':
+            raise ValidationError('Já existe uma consulta agendada \
+                                  para este horário com este veterinário.')
 
     def save(self, *args, **kwargs):
         self.clean()
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"Consulta de {self.animal.nome} com {self.veterinario.nome} em {self.data}"
+        veterinario = self.veterinario.nome if self.veterinario else 'desconhecido'
 
+        # Converte a data/hora (que está em UTC) para o fuso horário local
+        # definido no seu settings.py (America/Sao_Paulo)
+        data_local = localtime(self.data)
+        data_formatada = data_local.strftime('%d/%m/%Y às %H:%M')
 
+        return f"Consulta de {self.animal.nome} com {veterinario} em {data_formatada}"
 
+class Testebd(models.Model):
+    nome_teste = models.CharField(max_length=100)
 
-
-
+    def __str__(self):
+        return self.nome_teste

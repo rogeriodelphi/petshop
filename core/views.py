@@ -1,32 +1,131 @@
+import random
+from django.shortcuts import render, redirect, get_object_or_404
+from django.views.decorators.csrf import csrf_exempt
+from django.core.paginator import Paginator
 from django.http import JsonResponse
-from django.shortcuts import render, redirect
 from django.contrib import messages
-from .models import Animal, Consulta, Cliente
-from django.core.exceptions import ValidationError
-from .forms import ConsultaForm, AnimalForm
+from django.db.models import Q
+from .models import Animal, Consulta, Cliente, MedicoVeterinario
+from .forms import ConsultaForm, AnimalForm, ClienteForm, MedicoVeterinarioForm
+from django.contrib.auth import login, logout
+from django.contrib.auth.forms import AuthenticationForm
+from django.contrib.auth.decorators import login_required
 
 
+# Login
+def login_view(request):
+    if request.method == "POST":
+        form = AuthenticationForm(request, data=request.POST)
+        if form.is_valid():
+            user = form.get_user()
+            print(user)
+            login(request, user)
+            return redirect('home')  # troque para sua URL de destino
+    else:
+        form = AuthenticationForm()
+    return render(request, 'login.html', {'form': form})
+
+
+@login_required(login_url='login')
+def logout_view(request):
+    logout(request)
+    return redirect('login')
+
+
+@login_required(login_url='login')
 def lista_animais(request):
-    animais = Animal.objects.all()
-    return render(request, 'lista_animais.html', {'animais': animais})
+    animais = Animal.objects.all()  # Obtém todos os animais
+    # print(animais)
+    return render(request, 'animal/lista_animais.html', {'animais': animais})
 
 
+@login_required(login_url='login')
 def add_animal(request):
     if request.method == 'POST':
         form = AnimalForm(request.POST)
         if form.is_valid():
-            animal = form.save()
-            return JsonResponse({'id': animal.id, 'nome': animal.nome})
+            animal = form.save(commit=False)
+            cpf = request.POST.get("cpf")
+            # print(cpf)
+            animal.dono = Cliente.objects.get(cpf=cpf)
+            animal.save()
+            return JsonResponse({
+                'id': animal.id,
+                'nome': animal.nome,
+                'raca': animal.raca
+            })
         else:
             return JsonResponse({'errors': form.errors}, status=400)
     else:
         form = AnimalForm()
-    return render(request, 'add_animal.html', {'form': form})
+    return render(request, 'animal/add_animal_modal.html', {'form': form})
 
-# Agendar consulta
+
+# Editar Animal
+@csrf_exempt
+def edit_animal(request, pk):
+    animal = get_object_or_404(Animal, pk=pk)
+    if request.method == "POST":
+        form = AnimalForm(request.POST, instance=animal)
+        if form.is_valid():
+            animal = form.save()
+            return JsonResponse({
+                "success": True,
+                "nome": animal.nome,  # retorna nome do animal
+                "raca": animal.raca  # retorna raca
+            })
+        return JsonResponse({"success": False, "errors": form.errors})
+    return JsonResponse({"success": False, "errors": "Método inválido"})
+
+
+# Lista de Clientes
+@login_required(login_url='login')
+def lista_clientes(request):
+    filtro_cpf = request.GET.get('cpf', '')
+    clientes_qs = Cliente.objects.all().prefetch_related('animais')
+    if filtro_cpf:
+        clientes_qs = clientes_qs.filter(cpf__icontains=filtro_cpf)
+
+    paginator = Paginator(clientes_qs, 10)  # 10 clientes por página
+    page_number = request.GET.get('page')
+    clientes = paginator.get_page(page_number)
+
+    return render(request, 'cliente/lista_clientes.html', {
+        'clientes': clientes,
+        'filtro_cpf': filtro_cpf
+    })
+
+
+@login_required(login_url='login')
+def add_cliente(request):
+    if request.method == 'POST':
+        form = ClienteForm(request.POST)
+        if form.is_valid():
+            cliente = form.save()
+            return JsonResponse(
+                {'redirect_url': f'/agendar_consulta/?cpf={cliente.cpf}'})
+        else:
+            return JsonResponse({'errors': form.errors}, status=400)
+    else:
+        form = ClienteForm()
+    return render(request, 'cliente/add_cliente_modal.html', {'form': form})
+
+
+# Consultas
+
+@login_required(login_url='login')
 def agendar_consulta(request):
     cliente = None
     animais = None
+
+    cpf = request.GET.get("cpf")
+    if cpf:
+        try:
+            cliente = Cliente.objects.get(cpf=cpf)
+            animais = cliente.animais.all()
+        except Cliente.DoesNotExist:
+            pass
+
     if request.method == 'POST':
         # botão buscar cliente
         if "buscar" in request.POST:
@@ -44,22 +143,109 @@ def agendar_consulta(request):
         # botão salvar consulta
         elif "salvar" in request.POST:
             form = ConsultaForm(request.POST)
+            # print(request.POST)
             if form.is_valid():
                 form.save()
                 messages.success(request, 'Consulta agendada com sucesso!')
                 return redirect('lista_consultas')
             else:
                 messages.error(request, 'Erro ao agendar consulta.')
-
     else:
         form = ConsultaForm()
-
-    return render(request, 'agendar_consulta.html', {
+    form_pet = AnimalForm()
+    form_cliente = ClienteForm()
+    return render(request, 'consulta/agendar_consulta.html', {
         'form': form,
         'cliente': cliente,
-        'animais': animais
+        'animais': animais,
+        'form_pet': form_pet,
+        'form_cliente': form_cliente
     })
 
+
+@login_required(login_url='login')
 def lista_consultas(request):
-    consultas = Consulta.objects.all().order_by('data')
-    return render(request, 'lista_consultas.html', {'consultas': consultas})
+    filtro_animal = request.GET.get('animal')
+    if filtro_animal:
+        consultas = Consulta.objects.filter(
+            animal__nome__icontains=filtro_animal)
+    else:
+        consultas = Consulta.objects.all()
+
+    paginator = Paginator(consultas, 10)  # 10 consultas por página
+    page_number = request.GET.get('page')
+    consultas = paginator.get_page(page_number)
+
+    return render(request, 'consulta/lista_consultas.html',
+                  {'consultas': consultas,
+                   'filtro_animal': filtro_animal
+                   })
+
+
+@login_required(login_url='login')
+def consulta_eventos(request):
+    eventos = []
+    for c in Consulta.objects.all():
+        eventos.append({
+            "id": c.id,
+            "title": f"{c.animal.nome} - {c.veterinario.nome}",
+            "start": c.data.strftime("%Y-%m-%dT%H:%M:%S"),
+            "color": "#" + "".join([random.choice("0123456789ABCDEF") for _ in range(6)])
+        })
+    # print(eventos)
+    return JsonResponse(eventos, safe=False)
+
+
+@login_required(login_url="login")
+def consulta_eventos_veterinario(request):
+    from django.utils.timezone import localtime, make_aware, get_current_timezone
+    from datetime import datetime, time, timedelta # time é mais limpo que datetime.min.time()
+
+    veterinario_id = request.GET.get("veterinario")
+    if not veterinario_id:
+        return JsonResponse([], status=200)
+
+    # Consultas agendadas já no formato necessário
+    consultas = (
+        Consulta.objects.filter(veterinario_id=veterinario_id)
+        .select_related("animal", "veterinario")
+    )
+
+    consultas_dict = {
+            f"{localtime(c.data).strftime('%Y-%m-%d')}-{localtime(c.data).hour}": c.id for c in consultas
+        }
+    # 2025-09-12-09
+    print(consultas_dict)
+
+    eventos = [
+        {
+            "id": c.id,
+            "title": f"{c.animal.nome} - {c.veterinario.nome}",
+            "start": localtime(c.data).strftime("%Y-%m-%dT%H:%M:%S"), # 2: Converta para o fuso local
+            "color": "#dc3545",  # vermelho
+        }
+        for c in consultas
+    ]
+
+    hoje = localtime().date() # Use localtime() para pegar a data atual no fuso correto
+    horarios = [8, 9, 10, 11, 13, 14, 15, 16]
+
+    for i in range(7):
+        data = hoje + timedelta(days=i)
+        if data.weekday() >= 5:  # Pula sábado e domingo
+            continue
+
+        for hora in horarios:
+            key = f"{data.strftime('%Y-%m-%d')}-{hora}"
+            print(key)
+            if key not in consultas_dict:
+                slot_inicio = make_aware(datetime.combine(data, time(hour=hora)), get_current_timezone()) # timezone são paulo, portugal
+                eventos.append(
+                    {
+                        "id": f"disp-{data}-{hora}",
+                        "title": "Disponível",
+                        "start": slot_inicio.strftime("%Y-%m-%dT%H:%M:%S"), # Formate o slot fuso horário
+                        "color": "#28a745",  # verde
+                    }
+                )
+    return JsonResponse(eventos, safe=False)
